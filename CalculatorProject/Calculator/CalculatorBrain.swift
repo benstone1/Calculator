@@ -33,9 +33,12 @@ struct CalculatorBrain {
     }
     
     private var state: MostRecentOperation = .clear
+    private var state2: Operation = .clear
     
     private enum Operation {
         case constant(Double)
+        case operand(Double)
+        case variable(String)
         case unaryOperation((Double) -> Double)
         case binaryOperation((Double,Double) -> Double)
         case equals
@@ -74,79 +77,118 @@ struct CalculatorBrain {
         if let operation = operations[symbol] {
             switch operation {
             case .constant(let value):
+                switch state2 {
+                case .unaryOperation, .constant:
+                    break
+                default:
+                    accumulator.val = value
+                    accumulator.description += symbol
+                    state2 = .constant(value)
+                }
+                /*
                 if (state != .isUnary) && state != .isConstant {
                     accumulator.val = value
                     accumulator.description += symbol
-                    state = .isConstant
+                    //state = .isConstant
+                    state2 = .constant(value)
                 }
+                */
             case .unaryOperation(let function):
                 if accumulator.val != nil {
-                    if pendingBinaryOperation != nil {
-                        switch state {
-                        case .clear, .isBinary, .isConstant:
-                            accumulator.description = accumulator.description + symbol + "(" + String(accumulator.val!) + ")"
-                        case .isUnary:
-                            accumulator.description = accumulator.description + ")"
-                            var indexOfLastOperatorSymbol = 0
-                            for (i,c) in accumulator.description.characters.enumerated() {
-                                if let c = operations[String(c)]  {
-                                    switch c{
-                                    case .binaryOperation:
-                                        indexOfLastOperatorSymbol = i
-                                    default:
-                                        break
-                                    }
-                                }
-                            }
-                            accumulator.description = accumulator.description.substring(to: accumulator.description.index(accumulator.description.startIndex, offsetBy: indexOfLastOperatorSymbol + 1)) + symbol + "(" + accumulator.description.substring(from: accumulator.description.index(accumulator.description.startIndex, offsetBy: indexOfLastOperatorSymbol + 2))
-                            
-                        }
-                    } else {
-                        var includeAccumulatorVal = false
-                        switch state {
-                        case .isBinary, .isUnary, .isConstant:
-                            includeAccumulatorVal = false
-                        case .clear:
-                            includeAccumulatorVal = true
-                        }
-                        accumulator.description = symbol + "(" + accumulator.description + (includeAccumulatorVal ? String(accumulator.val!) : "") + ")"
-                        //accumulator.description = "\(symbol)(\(accumulator.description)\(!(completedABinaryOperation || mostRecentOperationIsUnary) ? String(accumulator.val!) : ""))"
-                    }
+                    updateDescription(symbol)
                     accumulator.val = function(accumulator.val!)
-                    state = .isUnary
+                    //state = .isUnary
+                    state2 = .unaryOperation(function)
                 }
             case .binaryOperation(let function):
                 if accumulator.val != nil {
                     pendingBinaryOperation = PendingBinaryOperation(function: function, firstOperand: accumulator.val!)
-                    var includeAccumulatorVal = false
-                    switch state {
-                    case .isBinary, .isConstant, .isUnary:
-                        includeAccumulatorVal = false
+                    switch state2 {
                     case .clear:
-                        includeAccumulatorVal = true
+                        accumulator.description += String(accumulator.val!) + String(symbol)
+                    default:
+                        accumulator.description += "" + String(symbol)
+
                     }
-                    accumulator.description += (includeAccumulatorVal ? String(accumulator.val!) : "") + String(symbol)
-                    //accumulator.description += (!(completedABinaryOperation || mostRecentOperationIsUnary || mostRecentOperationIsSymbol) ? String(accumulator.val!) : "") + String(symbol)
+                    /*
+                    accumulator.description += (state == .clear ? String(accumulator.val!) : "") + String(symbol)
                     accumulator.val = nil
-                    state = .isBinary
+                    //state = .isBinary
+                     */
+                    state2 = .binaryOperation(function)
                 }
             case .equals:
                 performPendingBinaryOperation()
             case .clear:
                 accumulator = (0, "")
                 state = .clear
+                state2 = .clear
+            default:
+                break
             }
         }
     }
     
+    mutating private func updateDescription(_ symbol: String) {
+        if pendingBinaryOperation != nil {
+            switch state2 {
+            case .clear, .binaryOperation, .constant:
+                accumulator.description = accumulator.description + symbol + "(" + String(accumulator.val!) + ")"
+            case .unaryOperation:
+                accumulator.description = accumulator.description + ")"
+                let indexOfLastOperatorSymbol = findLastOperatorSymbolIndex()
+                accumulator.description = accumulator.description.substring(to: accumulator.description.index(accumulator.description.startIndex, offsetBy: indexOfLastOperatorSymbol + 1)) + symbol + "(" + accumulator.description.substring(from: accumulator.description.index(accumulator.description.startIndex, offsetBy: indexOfLastOperatorSymbol + 2))
+            default:
+                break
+            }
+            
+            /*
+            switch state {
+            case .clear, .isBinary, .isConstant:
+                accumulator.description = accumulator.description + symbol + "(" + String(accumulator.val!) + ")"
+            case .isUnary:
+                accumulator.description = accumulator.description + ")"
+                let indexOfLastOperatorSymbol = findLastOperatorSymbolIndex()
+                accumulator.description = accumulator.description.substring(to: accumulator.description.index(accumulator.description.startIndex, offsetBy: indexOfLastOperatorSymbol + 1)) + symbol + "(" + accumulator.description.substring(from: accumulator.description.index(accumulator.description.startIndex, offsetBy: indexOfLastOperatorSymbol + 2))
+            }
+            */
+            
+        } else {
+            switch state2 {
+            case .clear:
+                accumulator.description = symbol + "(" + accumulator.description + String(accumulator.val!) + ")"
+            default:
+                accumulator.description = symbol + "(" + accumulator.description + "" + ")"
+
+            }
+            //accumulator.description = symbol + "(" + accumulator.description + (state == .clear ? String(accumulator.val!) : "") + ")"
+        }
+    }
+    
+    private func findLastOperatorSymbolIndex() -> Int {
+        var indexOfLastOperatorSymbol = 0
+        for (i,c) in accumulator.description.characters.enumerated() {
+            if let c = operations[String(c)]  {
+                switch c {
+                case .binaryOperation:
+                    indexOfLastOperatorSymbol = i
+                default:
+                    break
+                }
+            }
+        }
+        return indexOfLastOperatorSymbol
+    }
+    
     mutating private func performPendingBinaryOperation() {
         if pendingBinaryOperation != nil && accumulator.val != nil {
+            //let includeAccumulatorVal = (state == .clear || state == .isBinary)
             var includeAccumulatorVal = false
-            switch state {
-            case .isConstant, .isUnary:
-                includeAccumulatorVal = false
-            case .clear, .isBinary:
+            switch state2 {
+            case .clear, .binaryOperation:
                 includeAccumulatorVal = true
+            default:
+                break
             }
             accumulator.description += includeAccumulatorVal ? String(accumulator.val!) : ""
             accumulator.val = pendingBinaryOperation!.perform(with: accumulator.val!)
@@ -174,11 +216,12 @@ struct CalculatorBrain {
     }
     
     mutating func setOperand(variable named: String) {
-        //accumulator.val = named
+        //stack.append(Input.variable(named))
     }
-
+    
     
     func evaluate(using variables: [String: Double]? = nil) -> (result: Double?, isPending: Bool, description: String) {
+        
         return (0,false, "")
     }
     
