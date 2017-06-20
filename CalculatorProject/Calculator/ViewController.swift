@@ -20,7 +20,6 @@ class ViewController: UIViewController {
         adjustButtonLayout(for: view, isPortrait: traitCollection.horizontalSizeClass == .compact && traitCollection.verticalSizeClass == .regular, isStartUp: false)
     }
     
-    
     private func adjustButtonLayout(for view: UIView, isPortrait: Bool, isStartUp: Bool) {
         for subview in view.subviews {
             if subview.tag == 1 {
@@ -33,7 +32,6 @@ class ViewController: UIViewController {
             }
         }
     }
-    
     
     @IBOutlet weak var display: UILabel!
     var userIsTyping = false
@@ -65,6 +63,26 @@ class ViewController: UIViewController {
     
     private var brain = CalculatorBrain()
     
+    private var variableDict = [String: Double]()
+    
+    @IBOutlet weak var variableLabel: UILabel!
+    
+    private func displayResult() {
+        let evaluated = brain.evaluate(using: variableDict)
+        
+        if let result = evaluated.result {
+            displayValue = result
+        }
+        userInputs.text = evaluated.description
+        let textCurrentlyInDisplay = userInputs.text!
+        if brain.isPending {
+            userInputs.text = textCurrentlyInDisplay + "..."
+        } else {
+            userInputs.text = textCurrentlyInDisplay + "="
+        }
+    }
+    
+    
     @IBAction func performOperation(_ sender: UIButton) {
         if userIsTyping {
             brain.setOperand(displayValue)
@@ -73,19 +91,44 @@ class ViewController: UIViewController {
         if let validSymbol = sender.currentTitle {
             brain.performOperation(validSymbol)
         }
-        if let result = brain.result {
-            displayValue = result
-        }
-        userInputs.text = brain.description
-        let textCurrentlyInDisplay = userInputs.text!
-        if brain.resultIsPending {
-            userInputs.text = textCurrentlyInDisplay + "..."
+        displayResult()
+    }
+    
+    @IBAction func reset(_ sender: UIButton) {
+        brain = CalculatorBrain()
+        displayValue = 0
+        userInputs.text = " "
+        userIsTyping = false
+        variableDict = [:]
+    }
+    
+    @IBAction func undo(_ sender: UIButton) {
+        if userIsTyping {
+            if let textSoFar = display.text {
+                var newText = textSoFar.substring(to: textSoFar.index(textSoFar.startIndex, offsetBy: textSoFar.characters.count - 1))
+                if newText.isEmpty || newText == "0" {
+                    userIsTyping = false
+                    newText = "0"
+                }
+                display.text = newText
+            }
         } else {
-            userInputs.text = textCurrentlyInDisplay + "="
+            brain.undo()
+            displayResult()
         }
-        if sender.currentTitle == "C" {
-            userInputs.text = ""
-        }
+    }
+    
+    @IBAction func storeVariable(_ sender: UIButton) {
+        variableDict["M"] = displayValue
+        //variableDict.updateValue(displayValue, forKey: "M")
+        userIsTyping = false
+        variableLabel.text = "M = " + String(displayValue)
+        displayResult()
+    }
+    @IBAction func useVariable(_ sender: UIButton) {
+        brain.setOperand(variable: "M")
+        userIsTyping = false
+        displayResult()
     }
 }
 
